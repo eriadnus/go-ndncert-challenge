@@ -6,6 +6,7 @@ import (
 	"net/mail"
 	"net/smtp"
 	"os"
+	"regexp"
 )
 
 const SmtpConfigFilePath = "../config/smtp.yml"
@@ -51,9 +52,14 @@ func readSmtpConfig() (*SMTPAuth, error) {
 }
 
 func NewCodeEmail(e Email, c Code) (CodeEmail, Status, error) {
-	_, err := mail.ParseAddress(string(e))
-	if err != nil {
+	_, emailErr := mail.ParseAddress(string(e))
+	if emailErr != nil {
 		return CodeEmail{}, Invalid, fmt.Errorf("invalid email address %s: failed to match regex", e)
+	}
+
+	_, codeErr := regexp.MatchString("^\\d{6}$", string(c))
+	if codeErr != nil {
+		return CodeEmail{}, Invalid, fmt.Errorf("invalid code %s: failed to match regex", c)
 	}
 
 	return CodeEmail{e, c}, Success, nil
