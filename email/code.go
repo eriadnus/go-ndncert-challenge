@@ -10,6 +10,7 @@ import (
 )
 
 const SmtpConfigFilePath = "../config/smtp.yml"
+const NDNCodeEmailSubjectLine = "Subject: Your NDN Email Challenge Secret Pin"
 
 type Status int
 
@@ -74,11 +75,15 @@ func (c CodeEmail) SendCodeEmail() (Status, error) {
 	auth := smtp.PlainAuth(conf.Smtp.Identity, conf.Smtp.Username, conf.Smtp.Password, conf.Smtp.Host)
 	from := conf.Smtp.Identity
 	to := []string{c.ChallengeEmail}
-	subject := "Subject: Your NDN Email Challenge Secret Pin\n"
-	body := fmt.Sprintf("Secret  PIN: %s", c.ChallengeCode)
+	subject := fmt.Sprintf("From: <%s>\r\nTo: <%s>\r\n%s\r\n\r\n",
+		from,
+		to,
+		NDNCodeEmailSubjectLine)
+	body := fmt.Sprintf("Secret  PIN: %s\r\n", c.ChallengeCode)
 	message := []byte(subject + body)
 
 	sendMailErr := smtp.SendMail(address, auth, from, to, message)
+
 	if sendMailErr != nil {
 		return Error, fmt.Errorf("failed to send code challenge email to %s", c.ChallengeEmail)
 	}
