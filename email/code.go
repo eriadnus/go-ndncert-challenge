@@ -15,11 +15,11 @@ type Status int
 
 type SMTPAuth struct {
 	Smtp struct {
-		identity string
-		username string
-		password string
-		host     string
-		port     int64
+		Identity string `yaml:"identity"`
+		Username string `yaml:"username"`
+		Password string `yaml:"password"`
+		Host     string `yaml:"host"`
+		Port     int64  `yaml:"port"`
 	}
 }
 
@@ -55,8 +55,9 @@ func NewCodeEmail(e string, c string) (CodeEmail, Status, error) {
 		return CodeEmail{}, Invalid, fmt.Errorf("invalid email address %s: failed to match regex", e)
 	}
 
-	_, codeErr := regexp.MatchString("^\\d{6}$", c)
-	if codeErr != nil {
+	codeMatcher := regexp.MustCompile("^\\d{6}$")
+	isMatch := codeMatcher.Match([]byte(c))
+	if !isMatch {
 		return CodeEmail{}, Invalid, fmt.Errorf("invalid code %s: failed to match regex", c)
 	}
 
@@ -69,9 +70,9 @@ func (c CodeEmail) SendCodeEmail() (Status, error) {
 		return Error, fmt.Errorf("failed to read config file from path: %s", SmtpConfigFilePath)
 	}
 
-	address := fmt.Sprintf("%s:%d", conf.Smtp.host, conf.Smtp.port)
-	auth := smtp.PlainAuth(conf.Smtp.identity, conf.Smtp.username, conf.Smtp.password, conf.Smtp.host)
-	from := conf.Smtp.identity
+	address := fmt.Sprintf("%s:%d", conf.Smtp.Host, conf.Smtp.Port)
+	auth := smtp.PlainAuth(conf.Smtp.Identity, conf.Smtp.Username, conf.Smtp.Password, conf.Smtp.Host)
+	from := conf.Smtp.Identity
 	to := []string{c.ChallengeEmail}
 	subject := "Subject: Your NDN Email Challenge Secret Pin\n"
 	body := fmt.Sprintf("Secret  PIN: %s", c.ChallengeCode)
@@ -79,7 +80,7 @@ func (c CodeEmail) SendCodeEmail() (Status, error) {
 
 	sendMailErr := smtp.SendMail(address, auth, from, to, message)
 	if sendMailErr != nil {
-		return Error, fmt.Errorf("failed to send code challenge email to %s", string(c.ChallengeEmail))
+		return Error, fmt.Errorf("failed to send code challenge email to %s", c.ChallengeEmail)
 	}
 
 	return Success, nil
