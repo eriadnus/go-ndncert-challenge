@@ -7,8 +7,8 @@ import (
 
 type ECDHState struct {
 	ClientPublicKey *ecdh.PublicKey
-	PublicKey *ecdh.PublicKey
-	privateKey *ecdh.PrivateKey
+	PublicKey       *ecdh.PublicKey
+	privateKey      *ecdh.PrivateKey
 }
 
 func NewECDHState(pubKey []byte) *ECDHState {
@@ -21,8 +21,7 @@ func NewECDHState(pubKey []byte) *ECDHState {
 	return &e
 }
 
-
-func (e* ECDHState) GetSharedSecret(pubKey []byte) []byte {
-	shared_secret, _ := e.privateKey.ECDH(e.ClientPublicKey)
-	return shared_secret
+func (e *ECDHState) GetSharedSecret() []byte {
+	sharedSecret, _ := e.privateKey.ECDH(e.ClientPublicKey)
+	return sharedSecret
 }
