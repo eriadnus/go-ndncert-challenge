@@ -7,21 +7,21 @@ import (
 	"io"
 )
 
-const NonceSizeBytes = 12
-const TagSizeBytes = 16
+const nonceSizeBytes = 12
+const tagSizeBytes = 16
 
 type EncryptedMessage struct {
 	/**
 	Initialization Vector (IV) 12 bytes in length consisting of
 	64 bits randomly generated + 32 bits counter in big endian also known as nonce.
 	*/
-	initializationVector [NonceSizeBytes]byte
+	initializationVector [nonceSizeBytes]byte
 
 	/**
 	Authentication tag 16 bytes in length
 	also known as a message authentication code (MAC).
 	*/
-	authenticationTag [TagSizeBytes]byte
+	authenticationTag [tagSizeBytes]byte
 
 	/**
 	Encrypted payload
@@ -29,13 +29,13 @@ type EncryptedMessage struct {
 	encryptedPayload []byte
 }
 
-func EncryptPayload(key [TagSizeBytes]byte, plaintext []byte, requestId [8]uint8) EncryptedMessage {
+func EncryptPayload(key [tagSizeBytes]byte, plaintext []byte, requestId [8]uint8) EncryptedMessage {
 	block, cipherErr := aes.NewCipher(key[:])
 	if cipherErr != nil {
 		panic(cipherErr.Error())
 	}
 
-	nonce := make([]byte, NonceSizeBytes)
+	nonce := make([]byte, nonceSizeBytes)
 	if _, randReadErr := io.ReadFull(rand.Reader, nonce); randReadErr != nil {
 		panic(randReadErr.Error())
 	}
@@ -46,12 +46,12 @@ func EncryptPayload(key [TagSizeBytes]byte, plaintext []byte, requestId [8]uint8
 	}
 
 	out := aesgcm.Seal(nil, nonce, plaintext, requestId[:])
-	_initializationVector := out[:NonceSizeBytes]
-	encryptedPayload := out[NonceSizeBytes : NonceSizeBytes+len(plaintext)]
-	_authenticationTag := out[NonceSizeBytes+len(plaintext):]
+	_initializationVector := out[:nonceSizeBytes]
+	encryptedPayload := out[nonceSizeBytes : nonceSizeBytes+len(plaintext)]
+	_authenticationTag := out[nonceSizeBytes+len(plaintext):]
 
-	var initializationVector [NonceSizeBytes]byte
-	var authenticationTag [TagSizeBytes]byte
+	var initializationVector [nonceSizeBytes]byte
+	var authenticationTag [tagSizeBytes]byte
 
 	copy(initializationVector[:], _initializationVector)
 	copy(authenticationTag[:], _authenticationTag)

@@ -9,8 +9,8 @@ import (
 	"regexp"
 )
 
-const SmtpConfigFilePath = "../config/smtp.yml"
-const NDNCodeEmailSubjectLine = "Subject: Your NDN Email Challenge Secret Pin"
+const smtpConfigFilePath = "../config/smtp.yml"
+const codeEmailSubjectLine = "Subject: Your NDN Email Challenge Secret Pin"
 
 type Status int
 
@@ -36,7 +36,7 @@ const (
 )
 
 func readSmtpConfig() (*SMTPAuth, error) {
-	buf, err := os.ReadFile(SmtpConfigFilePath)
+	buf, err := os.ReadFile(smtpConfigFilePath)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +44,7 @@ func readSmtpConfig() (*SMTPAuth, error) {
 	c := &SMTPAuth{}
 	err = yaml.Unmarshal(buf, c)
 	if err != nil {
-		return nil, fmt.Errorf("in file %q: %w", SmtpConfigFilePath, err)
+		return nil, fmt.Errorf("in file %q: %w", smtpConfigFilePath, err)
 	}
 
 	return c, err
@@ -68,7 +68,7 @@ func NewCodeEmail(e string, c string) (CodeEmail, Status, error) {
 func (c CodeEmail) SendCodeEmail() (Status, error) {
 	conf, readSmtpConfigErr := readSmtpConfig()
 	if readSmtpConfigErr != nil {
-		return Error, fmt.Errorf("failed to read config file from path: %s", SmtpConfigFilePath)
+		return Error, fmt.Errorf("failed to read config file from path: %s", smtpConfigFilePath)
 	}
 
 	address := fmt.Sprintf("%s:%d", conf.Smtp.Host, conf.Smtp.Port)
@@ -78,7 +78,7 @@ func (c CodeEmail) SendCodeEmail() (Status, error) {
 	subject := fmt.Sprintf("From: <%s>\r\nTo: <%s>\r\n%s\r\n\r\n",
 		from,
 		to,
-		NDNCodeEmailSubjectLine)
+		codeEmailSubjectLine)
 	body := fmt.Sprintf("Secret  PIN: %s\r\n", c.ChallengeCode)
 	message := []byte(subject + body)
 
