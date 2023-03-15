@@ -69,14 +69,14 @@ func DecryptPayload(key [16]byte, message EncryptedMessage, requestId [8]uint8) 
 		panic(cipherErr.Error())
 	}
 
-	nonce := message.initializationVector[:]
+	nonce := message.InitializationVector[:]
 
 	aesgcm, encryptErr := cipher.NewGCM(block)
 	if encryptErr != nil {
 		panic(encryptErr.Error())
 	}
 
-	ciphertext := append(message.encryptedPayload, message.authenticationTag[:]...)
+	ciphertext := append(message.EncryptedPayload, message.AuthenticationTag[:]...)
 
 	plaintext, err := aesgcm.Open(nil, nonce, ciphertext, requestId[:])
 	if err != nil {
