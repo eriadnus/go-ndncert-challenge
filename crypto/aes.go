@@ -15,18 +15,18 @@ type EncryptedMessage struct {
 	Initialization Vector (IV) 12 bytes in length consisting of
 	64 bits randomly generated + 32 bits counter in big endian also known as nonce.
 	*/
-	initializationVector [nonceSizeBytes]byte
+	InitializationVector [nonceSizeBytes]byte
 
 	/**
 	Authentication tag 16 bytes in length
 	also known as a message authentication code (MAC).
 	*/
-	authenticationTag [tagSizeBytes]byte
+	AuthenticationTag [tagSizeBytes]byte
 
 	/**
 	Encrypted payload
 	*/
-	encryptedPayload []byte
+	EncryptedPayload []byte
 }
 
 func EncryptPayload(key [tagSizeBytes]byte, plaintext []byte, requestId [8]uint8) EncryptedMessage {
