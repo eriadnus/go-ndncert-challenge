@@ -4,7 +4,6 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"fmt"
 	"io"
 )
 
@@ -55,9 +54,6 @@ func EncryptPayload(key [TagSizeBytes]byte, plaintext []byte, requestId [8]uint8
 
 	copy(initializationVector[:], nonce)
 	copy(authenticationTag[:], _authenticationTag)
-	fmt.Printf("initial nonce: %s\n", nonce)
-	fmt.Printf("initial out: %s\n", out)
-	fmt.Printf("initial key: %s\n", key[:])
 
 	return EncryptedMessage{
 		initializationVector,
@@ -73,7 +69,6 @@ func DecryptPayload(key [16]byte, message EncryptedMessage, requestId [8]uint8) 
 	}
 
 	nonce := message.InitializationVector[:]
-	fmt.Printf("later nonce: %s\n", nonce)
 
 	aesgcm, encryptErr := cipher.NewGCM(block)
 	if encryptErr != nil {
@@ -81,8 +76,6 @@ func DecryptPayload(key [16]byte, message EncryptedMessage, requestId [8]uint8) 
 	}
 
 	ciphertext := append(message.EncryptedPayload, message.AuthenticationTag[:]...)
-	fmt.Printf("later out: %s\n", ciphertext)
-	fmt.Printf("later key: %s\n", key[:])
 
 	plaintext, err := aesgcm.Open(nil, nonce, ciphertext, requestId[:])
 	if err != nil {
