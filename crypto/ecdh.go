@@ -6,22 +6,27 @@ import (
 )
 
 type ECDHState struct {
-	ClientPublicKey *ecdh.PublicKey
+	RemotePublicKey *ecdh.PublicKey
 	PublicKey       *ecdh.PublicKey
 	privateKey      *ecdh.PrivateKey
 }
 
-func NewECDHState(pubKey []byte) *ECDHState {
+func (e *ECDHState) SetRemotePublicKey(pubKey []byte) {
 	curveP256 := ecdh.P256()
-	e := ECDHState{}
-	e.PublicKey, _ = curveP256.NewPublicKey(pubKey)
+	remotePubKey, err := curveP256.NewPublicKey(pubKey)
+	if err != nil {
+		panic(err.Error())
+	}
+	e.RemotePublicKey = remotePubKey
+}
+
+func (e *ECDHState) GenerateKeyPair() {
+	curveP256 := ecdh.P256()
 	e.privateKey, _ = curveP256.GenerateKey(rand.Reader)
 	e.PublicKey = e.privateKey.PublicKey()
-
-	return &e
 }
 
 func (e *ECDHState) GetSharedSecret() []byte {
-	sharedSecret, _ := e.privateKey.ECDH(e.ClientPublicKey)
+	sharedSecret, _ := e.privateKey.ECDH(e.RemotePublicKey)
 	return sharedSecret
 }

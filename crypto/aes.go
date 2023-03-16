@@ -4,24 +4,25 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"fmt"
 	"io"
 )
 
-const nonceSizeBytes = 12
-const tagSizeBytes = 16
+const NonceSizeBytes = 12
+const TagSizeBytes = 16
 
 type EncryptedMessage struct {
 	/**
 	Initialization Vector (IV) 12 bytes in length consisting of
 	64 bits randomly generated + 32 bits counter in big endian also known as nonce.
 	*/
-	InitializationVector [nonceSizeBytes]byte
+	InitializationVector [NonceSizeBytes]byte
 
 	/**
 	Authentication tag 16 bytes in length
 	also known as a message authentication code (MAC).
 	*/
-	AuthenticationTag [tagSizeBytes]byte
+	AuthenticationTag [TagSizeBytes]byte
 
 	/**
 	Encrypted payload
@@ -29,13 +30,13 @@ type EncryptedMessage struct {
 	EncryptedPayload []byte
 }
 
-func EncryptPayload(key [tagSizeBytes]byte, plaintext []byte, requestId [8]uint8) EncryptedMessage {
+func EncryptPayload(key [TagSizeBytes]byte, plaintext []byte, requestId [8]uint8) EncryptedMessage {
 	block, cipherErr := aes.NewCipher(key[:])
 	if cipherErr != nil {
 		panic(cipherErr.Error())
 	}
 
-	nonce := make([]byte, nonceSizeBytes)
+	nonce := make([]byte, NonceSizeBytes)
 	if _, randReadErr := io.ReadFull(rand.Reader, nonce); randReadErr != nil {
 		panic(randReadErr.Error())
 	}
@@ -46,15 +47,17 @@ func EncryptPayload(key [tagSizeBytes]byte, plaintext []byte, requestId [8]uint8
 	}
 
 	out := aesgcm.Seal(nil, nonce, plaintext, requestId[:])
-	_initializationVector := out[:nonceSizeBytes]
-	encryptedPayload := out[nonceSizeBytes : nonceSizeBytes+len(plaintext)]
-	_authenticationTag := out[nonceSizeBytes+len(plaintext):]
+	encryptedPayload := out[:len(plaintext)]
+	_authenticationTag := out[len(plaintext):]
 
-	var initializationVector [nonceSizeBytes]byte
-	var authenticationTag [tagSizeBytes]byte
+	var initializationVector [NonceSizeBytes]byte
+	var authenticationTag [TagSizeBytes]byte
 
-	copy(initializationVector[:], _initializationVector)
+	copy(initializationVector[:], nonce)
 	copy(authenticationTag[:], _authenticationTag)
+	fmt.Printf("initial nonce: %s\n", nonce)
+	fmt.Printf("initial out: %s\n", out)
+	fmt.Printf("initial key: %s\n", key[:])
 
 	return EncryptedMessage{
 		initializationVector,
@@ -70,6 +73,7 @@ func DecryptPayload(key [16]byte, message EncryptedMessage, requestId [8]uint8) 
 	}
 
 	nonce := message.InitializationVector[:]
+	fmt.Printf("later nonce: %s\n", nonce)
 
 	aesgcm, encryptErr := cipher.NewGCM(block)
 	if encryptErr != nil {
@@ -77,6 +81,8 @@ func DecryptPayload(key [16]byte, message EncryptedMessage, requestId [8]uint8) 
 	}
 
 	ciphertext := append(message.EncryptedPayload, message.AuthenticationTag[:]...)
+	fmt.Printf("later out: %s\n", ciphertext)
+	fmt.Printf("later key: %s\n", key[:])
 
 	plaintext, err := aesgcm.Open(nil, nonce, ciphertext, requestId[:])
 	if err != nil {
