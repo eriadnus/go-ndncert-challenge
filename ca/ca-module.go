@@ -175,7 +175,7 @@ func OnChallenge(i ndn.Interest) spec_2022.Data {
 	var requestIdFixed [8]byte
 
 	nameComponents := strings.Split(i.Name().String(), "/")
-	requestId := []byte(nameComponents[len(nameComponents)+negativeRequestIdOffset+1])
+	requestId := []byte(nameComponents[len(nameComponents)+negativeRequestIdOffset])
 	copy(requestIdFixed[:], requestId)
 
 	cipherMsgReader := enc.NewWireReader(i.AppParam())
@@ -232,9 +232,7 @@ func OnChallenge(i ndn.Interest) spec_2022.Data {
 			RemainTries: &remainTries,
 			RemainTime:  &diff,
 		}
-	}
-
-	if requestState.status == CaModuleChallenge {
+	} else if requestState.status == CaModuleChallenge {
 		if challengeIntPlaintext.Params[0].ParamKey != "code" {
 			//TODO: Prepare Error Packet
 		}
