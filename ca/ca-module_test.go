@@ -92,5 +92,38 @@ func TestOnNew(t *testing.T) {
 		ApplicationParameters: cipherMsgInt.Encode(),
 	}
 
-	OnChallenge(ichal)
+	dpchal := OnChallenge(ichal)
+
+	println(dpchal.Name().String())
+
+	codeParams := []*schemaold.Param{{
+		ParamKey:   "code",
+		ParamValue: []byte("123456"),
+	}}
+
+	codeIntPlaintext := schemaold.ChallengeIntPlain{
+		SelectedChal: "email",
+		Params:       codeParams,
+	}
+
+	codeIntPlaintextBytes := codeIntPlaintext.Encode().Join()
+
+	codeIntEncryptedMessage := crypto.EncryptPayload(symmetricKeyFixed, codeIntPlaintextBytes, requestIdFixed)
+	codeMsgInt := schemaold.CipherMsg{
+		InitVec:  codeIntEncryptedMessage.InitializationVector[:],
+		AuthNTag: codeIntEncryptedMessage.AuthenticationTag[:],
+		Payload:  codeIntEncryptedMessage.EncryptedPayload,
+	}
+
+	name3, _ := enc.NameFromStr(fmt.Sprintf("/ndn/CA/CHALLENGE/%s", cmdNewData.ReqId))
+	icode := &spec_2022.Interest{
+		NameV:                 name3,
+		CanBePrefixV:          false,
+		MustBeFreshV:          true,
+		SignatureInfo:         nil,
+		SignatureValue:        nil,
+		ApplicationParameters: codeMsgInt.Encode(),
+	}
+
+	OnChallenge(icode)
 }

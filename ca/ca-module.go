@@ -3,6 +3,7 @@ package ca
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"fmt"
 	enc "github.com/zjkmxy/go-ndn/pkg/encoding"
 	"github.com/zjkmxy/go-ndn/pkg/ndn"
 	"github.com/zjkmxy/go-ndn/pkg/ndn/spec_2022"
@@ -15,7 +16,7 @@ import (
 )
 
 type RequestType int64
-type RequestStatus int64
+type RequestStatus uint64
 type ChallengeType int64
 
 type RequestState struct {
@@ -52,12 +53,14 @@ type RequestState struct {
 	 * @brief The challenge type.
 	 */
 	ChallengeType string
+
+	ChallengeState EmailChallengeState
 }
 
 const (
-	BeforeChallenge RequestStatus = iota
-	Challenge
-	Pending
+	CaModuleBeforeChallenge RequestStatus = iota
+	CaModuleChallenge
+	CaModulePending
 	Success
 	Failure
 )
@@ -129,7 +132,7 @@ func OnNew(i ndn.Interest) spec_2022.Data {
 	copy(requestId, _requestId)
 
 	contentType := ndn.ContentTypeBlob
-	fourSecondsInNanoseconds := 4 * time.Second
+	fourSeconds := 4 * time.Second
 
 	cmdNewData := schemaold.CmdNewData{
 		EcdhPub: ecdhState.PublicKey.Bytes(),
@@ -149,7 +152,7 @@ func OnNew(i ndn.Interest) spec_2022.Data {
 		caPrefix:      caPrefixName,
 		requestId:     requestIdFixed,
 		requestType:   New,
-		status:        BeforeChallenge,
+		status:        CaModuleBeforeChallenge,
 		cert:          certReqData,
 		encryptionKey: symmetricKeyFixed,
 	}
@@ -158,7 +161,7 @@ func OnNew(i ndn.Interest) spec_2022.Data {
 		NameV: i.Name(),
 		MetaInfo: &spec_2022.MetaInfo{
 			ContentType:     utils.ConvIntPtr[ndn.ContentType, uint64](&contentType),
-			FreshnessPeriod: &fourSecondsInNanoseconds,
+			FreshnessPeriod: &fourSeconds,
 			FinalBlockID:    nil,
 		},
 		ContentV:       cmdNewDataWire,
@@ -167,7 +170,7 @@ func OnNew(i ndn.Interest) spec_2022.Data {
 	}
 }
 
-func OnChallenge(i ndn.Interest) {
+func OnChallenge(i ndn.Interest) spec_2022.Data {
 	var requestIdFixed [8]byte
 
 	nameComponents := strings.Split(i.Name().String(), "/")
@@ -201,36 +204,68 @@ func OnChallenge(i ndn.Interest) {
 		println(challengeIntPlaintext)
 		panic(err.Error())
 	}
-	/*
-		if challengeIntPlaintext.SelectedChal != "email" {
-			panic(fmt.Errorf("Only Supports Email Challenge!"))
+
+	if challengeIntPlaintext.SelectedChal != "email" {
+		panic(fmt.Errorf("Only Supports Email Challenge!"))
+	}
+
+	emailAddress := string(challengeIntPlaintext.Params[0].ParamValue)
+	requestState.ChallengeType = challengeIntPlaintext.SelectedChal
+
+	requestState.ChallengeState = EmailChallengeState{Email: emailAddress}
+	if requestState.status == CaModuleBeforeChallenge {
+		err := requestState.ChallengeState.InitiateChallenge()
+		if err != nil {
+			//TODO: Prepare Error Data Packet
+		}
+		requestState.status = CaModuleChallenge
+		challengeStatus := uint64(requestState.ChallengeState.Status)
+		remainTries := uint64(requestState.ChallengeState.RemainingAttempts)
+		expiry := requestState.ChallengeState.Expiry
+		diff := uint64(expiry.Sub(time.Now()).Seconds())
+		chalData := schemaold.ChallengeDataPlain{
+			Status:      uint64(requestState.status),
+			ChalStatus:  &challengeStatus,
+			RemainTries: &remainTries,
+			RemainTime:  &diff,
 		}
 
-		challengeIntPlaintext.Params[0].
-			requestState.ChallengeType = challengeIntPlaintext.SelectedChal
-
-		if requestState.status == BeforeChallenge {
-			err := requestState.challengeState.InitiateChallenge()
-			if err != nil {
-				//TODO: Prepare Error Data Packet
-			}
-			requestState.status = Challenge
-			//TODO: Prepare Data packet
+		chalDataBuf := chalData.Encode().Join()
+		chalDataEncryptedMessage := crypto.EncryptPayload(requestState.encryptionKey, chalDataBuf, requestIdFixed)
+		chalDataCiphertext := schemaold.CipherMsg{
+			InitVec:  chalDataEncryptedMessage.InitializationVector[:],
+			AuthNTag: chalDataEncryptedMessage.AuthenticationTag[:],
+			Payload:  chalDataEncryptedMessage.EncryptedPayload,
 		}
-		if requestState.status == Challenge {
-			status, err := requestState.challengeState.CheckCode(code)
-			if status == challenge.Failure {
-				delete(storage, requestId)
-				// TODO: Prepare Error Data Packet
-			} else if status == challenge.WrongCode {
-				//TODO: Prepare Wrong Code Data Packet
-			} else {
-				requestState.status = Pending
-				//TODO: Issue Certificate
-				delete(storage, requestId)
-				//TODO: Prepare Success Data Packet
-			}
+		chalDataCiphertextBuf := chalDataCiphertext.Encode()
+		contentType := ndn.ContentTypeBlob
+		fourSeconds := 4 * time.Second
+		return spec_2022.Data{
+			NameV: i.Name(),
+			MetaInfo: &spec_2022.MetaInfo{
+				ContentType:     utils.ConvIntPtr[ndn.ContentType, uint64](&contentType),
+				FreshnessPeriod: &fourSeconds,
+				FinalBlockID:    nil,
+			},
+			ContentV:       chalDataCiphertextBuf,
+			SignatureInfo:  nil,
+			SignatureValue: nil,
 		}
+	}
 
-	*/
+	if requestState.status == CaModuleChallenge {
+		status, err := requestState.ChallengeState.CheckCode(code)
+		if status == ChallengeModuleFailure {
+			delete(storage, requestId)
+			// TODO: Prepare Error Data Packet
+		} else if status == ChallengeModuleWrongCode {
+			//TODO: Prepare Wrong Code Data Packet
+		} else {
+			requestState.status = ChallengeModuleSuccess
+			//TODO: Issue Certificate
+			delete(storage, requestId)
+			//TODO: Prepare Success Data Packet
+		}
+	}
+	return spec_2022.Data{}
 }
