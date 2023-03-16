@@ -155,3 +155,7 @@ func OnNew(i ndn.Interest) spec_2022.Data {
 		SignatureValue: nil,
 	}
 }
+
+func OnChallenge(i ndn.Interest) spec_2022.Data {
+	
+}
