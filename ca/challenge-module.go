@@ -52,14 +52,13 @@ func (e *EmailChallengeState) InitiateChallenge() error {
 	}
 
 	e.Status = ChallengeModuleNeedCode
-	//e.SecretCode = e.generateSecretCode()
-	e.SecretCode = "123456"
+	e.SecretCode = e.generateSecretCode()
 	e.RemainingAttempts = maxAttempts
 	e.Expiry = time.Now().Add(time.Second * time.Duration(secretLifetime))
-	//err := e.sendEmail()
-	//if err != nil {
-	//	return err
-	//}
+	err := e.sendEmail()
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
