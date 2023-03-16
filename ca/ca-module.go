@@ -11,6 +11,7 @@ import (
 	"go.step.sm/crypto/randutil"
 	"ndn/ndncert/challenge/crypto"
 	"ndn/ndncert/challenge/schemaold"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -54,7 +55,7 @@ type RequestState struct {
 	 */
 	ChallengeType string
 
-	ChallengeState EmailChallengeState
+	ChallengeState *EmailChallengeState
 }
 
 const (
@@ -82,7 +83,7 @@ const negativeKeyComponentOffset = -4
 const keyString = "KEY"
 const negativeRequestIdOffset = -2
 
-var storage = make(map[[8]byte]RequestState)
+var storage = make(map[[8]byte]*RequestState)
 var availableChallenges = []string{"email"}
 
 func OnNew(i ndn.Interest) spec_2022.Data {
@@ -148,7 +149,7 @@ func OnNew(i ndn.Interest) spec_2022.Data {
 	copy(requestIdFixed[:], requestId[:])
 	copy(symmetricKeyFixed[:], symmetricKey)
 
-	storage[requestIdFixed] = RequestState{
+	storage[requestIdFixed] = &RequestState{
 		caPrefix:      caPrefixName,
 		requestId:     requestIdFixed,
 		requestType:   New,
@@ -195,6 +196,7 @@ func OnChallenge(i ndn.Interest) spec_2022.Data {
 		cipherMsg.Payload,
 	}
 
+	fmt.Printf("requestId: %s\n", requestIdFixed)
 	requestState := storage[requestIdFixed]
 
 	plaintext := crypto.DecryptPayload(requestState.encryptionKey, encryptedMsg, requestIdFixed)
@@ -209,11 +211,12 @@ func OnChallenge(i ndn.Interest) spec_2022.Data {
 		panic(fmt.Errorf("Only Supports Email Challenge!"))
 	}
 
-	emailAddress := string(challengeIntPlaintext.Params[0].ParamValue)
-	requestState.ChallengeType = challengeIntPlaintext.SelectedChal
+	var chalData schemaold.ChallengeDataPlain
 
-	requestState.ChallengeState = EmailChallengeState{Email: emailAddress}
 	if requestState.status == CaModuleBeforeChallenge {
+		emailAddress := string(challengeIntPlaintext.Params[0].ParamValue)
+		requestState.ChallengeType = challengeIntPlaintext.SelectedChal
+		requestState.ChallengeState = &EmailChallengeState{Email: emailAddress}
 		err := requestState.ChallengeState.InitiateChallenge()
 		if err != nil {
 			//TODO: Prepare Error Data Packet
@@ -223,49 +226,74 @@ func OnChallenge(i ndn.Interest) spec_2022.Data {
 		remainTries := uint64(requestState.ChallengeState.RemainingAttempts)
 		expiry := requestState.ChallengeState.Expiry
 		diff := uint64(expiry.Sub(time.Now()).Seconds())
-		chalData := schemaold.ChallengeDataPlain{
+		chalData = schemaold.ChallengeDataPlain{
 			Status:      uint64(requestState.status),
 			ChalStatus:  &challengeStatus,
 			RemainTries: &remainTries,
 			RemainTime:  &diff,
 		}
-
-		chalDataBuf := chalData.Encode().Join()
-		chalDataEncryptedMessage := crypto.EncryptPayload(requestState.encryptionKey, chalDataBuf, requestIdFixed)
-		chalDataCiphertext := schemaold.CipherMsg{
-			InitVec:  chalDataEncryptedMessage.InitializationVector[:],
-			AuthNTag: chalDataEncryptedMessage.AuthenticationTag[:],
-			Payload:  chalDataEncryptedMessage.EncryptedPayload,
-		}
-		chalDataCiphertextBuf := chalDataCiphertext.Encode()
-		contentType := ndn.ContentTypeBlob
-		fourSeconds := 4 * time.Second
-		return spec_2022.Data{
-			NameV: i.Name(),
-			MetaInfo: &spec_2022.MetaInfo{
-				ContentType:     utils.ConvIntPtr[ndn.ContentType, uint64](&contentType),
-				FreshnessPeriod: &fourSeconds,
-				FinalBlockID:    nil,
-			},
-			ContentV:       chalDataCiphertextBuf,
-			SignatureInfo:  nil,
-			SignatureValue: nil,
-		}
 	}
 
 	if requestState.status == CaModuleChallenge {
-		status, err := requestState.ChallengeState.CheckCode(code)
+		if challengeIntPlaintext.Params[0].ParamKey != "code" {
+			//TODO: Prepare Error Packet
+		}
+		code := string(challengeIntPlaintext.Params[0].ParamValue)
+		status, _ := requestState.ChallengeState.CheckCode(code)
 		if status == ChallengeModuleFailure {
-			delete(storage, requestId)
+			delete(storage, requestIdFixed)
 			// TODO: Prepare Error Data Packet
+
 		} else if status == ChallengeModuleWrongCode {
-			//TODO: Prepare Wrong Code Data Packet
+			challengeStatus := uint64(requestState.ChallengeState.Status)
+			remainTries := uint64(requestState.ChallengeState.RemainingAttempts)
+			expiry := requestState.ChallengeState.Expiry
+			diff := uint64(expiry.Sub(time.Now()).Seconds())
+			chalData = schemaold.ChallengeDataPlain{
+				Status:      uint64(requestState.status),
+				ChalStatus:  &challengeStatus,
+				RemainTries: &remainTries,
+				RemainTime:  &diff,
+			}
 		} else {
-			requestState.status = ChallengeModuleSuccess
+			requestState.status = CaModulePending
 			//TODO: Issue Certificate
-			delete(storage, requestId)
-			//TODO: Prepare Success Data Packet
+			delete(storage, requestIdFixed)
+			requestState.status = Success
+			challengeStatus := uint64(requestState.ChallengeState.Status)
+			millisecondTS := strconv.FormatInt(time.Now().UnixMilli(), 10)
+			certName := requestState.cert.Name()
+			certNamePrefix := requestState.cert.Name()[:len(certName)+negativeKeyComponentOffset+2].String()
+
+			newCertName, _ := enc.NameFromStr(certNamePrefix + "/NDNCERT/" + millisecondTS)
+
+			chalData = schemaold.ChallengeDataPlain{
+				Status:     uint64(requestState.status),
+				ChalStatus: &challengeStatus,
+				CertName:   newCertName,
+			}
 		}
 	}
-	return spec_2022.Data{}
+
+	chalDataBuf := chalData.Encode().Join()
+	chalDataEncryptedMessage := crypto.EncryptPayload(requestState.encryptionKey, chalDataBuf, requestIdFixed)
+	chalDataCiphertext := schemaold.CipherMsg{
+		InitVec:  chalDataEncryptedMessage.InitializationVector[:],
+		AuthNTag: chalDataEncryptedMessage.AuthenticationTag[:],
+		Payload:  chalDataEncryptedMessage.EncryptedPayload,
+	}
+	chalDataCiphertextBuf := chalDataCiphertext.Encode()
+	contentType := ndn.ContentTypeBlob
+	fourSeconds := 4 * time.Second
+	return spec_2022.Data{
+		NameV: i.Name(),
+		MetaInfo: &spec_2022.MetaInfo{
+			ContentType:     utils.ConvIntPtr[ndn.ContentType, uint64](&contentType),
+			FreshnessPeriod: &fourSeconds,
+			FinalBlockID:    nil,
+		},
+		ContentV:       chalDataCiphertextBuf,
+		SignatureInfo:  nil,
+		SignatureValue: nil,
+	}
 }

@@ -92,9 +92,7 @@ func TestOnNew(t *testing.T) {
 		ApplicationParameters: cipherMsgInt.Encode(),
 	}
 
-	dpchal := OnChallenge(ichal)
-
-	println(dpchal.Name().String())
+	OnChallenge(ichal)
 
 	codeParams := []*schemaold.Param{{
 		ParamKey:   "code",
@@ -126,4 +124,5 @@ func TestOnNew(t *testing.T) {
 	}
 
 	OnChallenge(icode)
+
 }
